@@ -22,13 +22,16 @@ IMAGES=(
   "redis:7-alpine"
   "nginx:1.27-alpine"
 )
+# Стенд разворачивается на amd64 (мини-сервер N100 и т.п.). Тянем образы строго под amd64,
+# иначе на arm-хосте (напр. Mac) мультиарх-базы (postgres/redis/nginx) скачаются как arm64.
+PLATFORM="${PLATFORM:-linux/amd64}"
 DIST="democracy-standalone-v${VERSION}"
 OUT="${DIST}.zip"
 
-echo ">>> [1/3] Pull образов (нужен интернет)..."
+echo ">>> [1/3] Pull образов под ${PLATFORM} (нужен интернет)..."
 for img in "${IMAGES[@]}"; do
   echo "    pull $img"
-  docker pull "$img"
+  docker pull --platform "${PLATFORM}" "$img"
 done
 
 echo ">>> [2/3] docker save -> images.tar (${#IMAGES[@]} образов)..."
