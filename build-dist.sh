@@ -45,7 +45,7 @@ zip -r -q "${OUT}" \
   nginx.conf \
   .env.example \
   start.sh start.bat \
-  RUNBOOK.md \
+  START.md \
   bundles \
   images.tar \
   -x "bundles/*.zip"
@@ -53,4 +53,4 @@ rm -f images.tar
 
 echo ""
 echo ">>> Готово: ${OUT} (api=${VERSION}, player=${PLAYER_VERSION}, admin=${ADMIN_VERSION})"
-echo ">>> Перенеси архив на целевой комп, распакуй и следуй RUNBOOK.md."
+echo ">>> Перенеси архив на целевой комп, распакуй и следуй START.md."
