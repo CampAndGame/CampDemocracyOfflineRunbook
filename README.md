@@ -24,4 +24,4 @@
 ## Версии образов (env для build-dist / compose)
 - `VERSION` — democracy-service (по умолчанию `1.0.36`);
 - `PLAYER_VERSION` — democracy-player (по умолчанию `1.0.17`);
-- `ADMIN_VERSION` — democracy-admin-standalone (по умолчанию `0.0.1`).
+- `ADMIN_VERSION` — democracy-admin-standalone (по умолчанию `0.0.2`).
