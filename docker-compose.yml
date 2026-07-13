@@ -35,7 +35,7 @@ services:
     restart: unless-stopped
 
   democracy-api:
-    image: 2345234523452345234534/democracy-service:${VERSION:-1.0.35}
+    image: 2345234523452345234534/democracy-service:${VERSION:-1.0.36}
     container_name: democracy-api
     environment:
       SPRING_PROFILES_ACTIVE: standalone
@@ -79,7 +79,7 @@ services:
 
   # Облегчённая админка Democracy (свой образ, своя версия). Baked config.js = same-origin.
   democracy-admin:
-    image: 2345234523452345234534/democracy-admin-standalone:${ADMIN_VERSION:-0.0.1}
+    image: 2345234523452345234534/democracy-admin-standalone:${ADMIN_VERSION:-0.0.2}
     container_name: democracy-admin
     expose:
       - "3000"
