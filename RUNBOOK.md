@@ -26,7 +26,7 @@
 | `democracy-redis` | redis:7-alpine | **runtime игры** (активная сессия, токены команд) — обязателен |
 | `democracy-api` | `…/democracy-service:1.0.36` | API + WebSocket, профиль `standalone` |
 | `democracy-player` | `…/democracy-player:1.0.19` | плеер игрока (тот же образ, что онлайн) |
-| `democracy-admin` | `…/democracy-admin-standalone:0.0.2` | облегчённая Democracy-only админка (логин по паролю) |
+| `democracy-admin` | `…/democracy-admin-standalone:0.0.3` | облегчённая Democracy-only админка (логин по паролю) |
 | `democracy-ui` | nginx:1.27-alpine | reverse-proxy: `/`→player, `/admin/`→admin, `/api`+`/ws`→api |
 
 UI — это **docker-образы из реестра** (как онлайн), а не собираемая на месте статика:
