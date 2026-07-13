@@ -11,7 +11,7 @@ cd "$(dirname "$0")"
 # Оператор на целевой машине: docker load < images.tar + docker compose up.
 
 VERSION="${VERSION:-1.0.36}"
-PLAYER_VERSION="${PLAYER_VERSION:-1.0.17}"
+PLAYER_VERSION="${PLAYER_VERSION:-1.0.19}"
 ADMIN_VERSION="${ADMIN_VERSION:-0.0.2}"
 REGISTRY="2345234523452345234534"
 IMAGES=(

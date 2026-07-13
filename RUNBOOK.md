@@ -25,7 +25,7 @@
 | `democracy-postgres` | postgres:15-alpine | БД игры (раунды/вопросы/санкции/команды/звуки) |
 | `democracy-redis` | redis:7-alpine | **runtime игры** (активная сессия, токены команд) — обязателен |
 | `democracy-api` | `…/democracy-service:1.0.36` | API + WebSocket, профиль `standalone` |
-| `democracy-player` | `…/democracy-player:1.0.17` | плеер игрока (тот же образ, что онлайн) |
+| `democracy-player` | `…/democracy-player:1.0.19` | плеер игрока (тот же образ, что онлайн) |
 | `democracy-admin` | `…/democracy-admin-standalone:0.0.2` | облегчённая Democracy-only админка (логин по паролю) |
 | `democracy-ui` | nginx:1.27-alpine | reverse-proxy: `/`→player, `/admin/`→admin, `/api`+`/ws`→api |
 

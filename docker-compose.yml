@@ -71,7 +71,7 @@ services:
 
   # Плеер игрока — ТОТ ЖE образ, что онлайн. Same-origin задаётся через /config.js (отдаёт nginx).
   democracy-player:
-    image: 2345234523452345234534/democracy-player:${PLAYER_VERSION:-1.0.17}
+    image: 2345234523452345234534/democracy-player:${PLAYER_VERSION:-1.0.19}
     container_name: democracy-player
     expose:
       - "3001"
