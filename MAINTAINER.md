@@ -8,8 +8,8 @@
 ## Из чего состоит (6 контейнеров)
 | Контейнер | Образ | Репозиторий-исходник |
 |---|---|---|
-| democracy-api | `2345…/democracy-service:1.0.31` | `CampAndGame/CampDemocracyService` (профиль `standalone`) |
-| democracy-player | `2345…/democracy-player:1.0.15` | `DemocracyReact` (= `JS/Democracy`) — тот же образ, что онлайн |
+| democracy-api | `2345…/democracy-service:1.0.35` | `CampAndGame/CampDemocracyService` (профиль `standalone`) |
+| democracy-player | `2345…/democracy-player:1.0.17` | `DemocracyReact` (= `JS/Democracy`) — тот же образ, что онлайн |
 | democracy-admin | `2345…/democracy-admin-standalone:0.0.1` | `CampAndGame/DemocracyAdminReact` |
 | postgres | `postgres:15-alpine` | — |
 | redis | `redis:7-alpine` | — |
