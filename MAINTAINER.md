@@ -41,7 +41,7 @@
 
 ## Ключевые технические факты
 - **nginx** = reverse-proxy: `/`→player:3001, `/admin/`→admin:3000 (срез `/admin`), `/api/democracy/`→api:8126 (срез префикса, роль gateway), `/api/democracy/ws/`→api `/ws/`, `/api/democracy/media/`→api (без среза). `/config.js` подменяется на `{apiBaseUrl:""}` (для плеера).
-- **api mem_limit=1g** (JVM `MaxRAMPercentage=75%` без лимита взял бы 75% всей RAM хоста).
+- **api mem_limit=1g** + `JAVA_OPTS` в compose: `MaxRAMPercentage=50` (heap ~512M) и `G1PeriodicGCInterval=300000` (возврат памяти ОС). Дефолт образа — 75% (онлайн); без mem_limit JVM взяла бы процент от RAM всего хоста. Работает с образом >= 1.0.37 (ENTRYPOINT читает `JAVA_OPTS`).
 - **standalone-специфика бэка:** авто-сид пустой игры (0,0); импорт bundle из UI = REPLACE (переимпорт заменяет игру, чистит старое медиа); логин по локальному паролю (`/public/admin/auth/login`, HS256).
 - **Сборка образов только amd64** (стенд/сервер amd64; Mac arm64 → `build-dist.sh` тянет с `--platform linux/amd64`).
 
