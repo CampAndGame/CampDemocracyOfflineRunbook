@@ -3,7 +3,7 @@
 Пошаговая инструкция: поднять игру **Democracy** на отдельном компьютере (мини-сервер / ноут ведущего).
 Интернет нужен **только один раз** — скачать дистрибутив. Дальше стенд работает **сам, без сети**.
 
-Версия: **1.0.36**.
+Версия: **1.0.37**.
 
 ---
 
@@ -24,7 +24,7 @@
 |-----------|-------|------|
 | `democracy-postgres` | postgres:15-alpine | БД игры (раунды/вопросы/санкции/команды/звуки) |
 | `democracy-redis` | redis:7-alpine | **runtime игры** (активная сессия, токены команд) — обязателен |
-| `democracy-api` | `…/democracy-service:1.0.36` | API + WebSocket, профиль `standalone` |
+| `democracy-api` | `…/democracy-service:1.0.37` | API + WebSocket, профиль `standalone` |
 | `democracy-player` | `…/democracy-player:1.0.19` | плеер игрока (тот же образ, что онлайн) |
 | `democracy-admin` | `…/democracy-admin-standalone:0.0.3` | облегчённая Democracy-only админка (логин по паролю) |
 | `democracy-ui` | nginx:1.27-alpine | reverse-proxy: `/`→player, `/admin/`→admin, `/api`+`/ws`→api |
