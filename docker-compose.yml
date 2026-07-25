@@ -35,7 +35,7 @@ services:
     restart: unless-stopped
 
   democracy-api:
-    image: 2345234523452345234534/democracy-service:${VERSION:-1.0.37}
+    image: 2345234523452345234534/democracy-service:${VERSION:-1.0.39}
     container_name: democracy-api
     environment:
       SPRING_PROFILES_ACTIVE: standalone
