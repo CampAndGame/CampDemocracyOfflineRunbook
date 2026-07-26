@@ -93,6 +93,7 @@ services:
     container_name: democracy-ui
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./diag.html:/etc/nginx/diag.html:ro
     depends_on:
       - democracy-api
       - democracy-player

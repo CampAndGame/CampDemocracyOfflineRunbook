@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Democracy — диагностика стенда</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font: 14px/1.45 -apple-system, "Segoe UI", Roboto, sans-serif; margin: 0 auto; max-width: 900px; padding: 16px; background: #111; color: #ddd; }
+  h1 { font-size: 18px; } h2 { font-size: 15px; margin: 18px 0 6px; }
+  input, button, select { font: inherit; padding: 6px 10px; border-radius: 6px; border: 1px solid #444; background: #1c1c1c; color: #ddd; }
+  button { cursor: pointer; background: #2b4a7a; border-color: #2b4a7a; } button:disabled { opacity: .5; cursor: default; }
+  .ok { color: #6fd66f; } .bad { color: #ff7a7a; } .warn { color: #ffcc66; }
+  #log { background: #000; border: 1px solid #333; border-radius: 6px; padding: 8px; height: 320px; overflow: auto; font: 12px/1.5 ui-monospace, Menlo, monospace; white-space: pre-wrap; }
+  .row { margin: 6px 0; } .kv b { display: inline-block; min-width: 260px; font-weight: 500; }
+</style>
+</head>
+<body>
+<h1>Диагностика стенда Democracy</h1>
+
+<div class="row">
+  <input id="pwd" type="password" placeholder="пароль админки" autocomplete="off">
+  <button id="loginBtn">Войти и проверить</button>
+  <span id="loginState"></span>
+</div>
+
+<div class="kv">
+  <div class="row"><b>WebSocket-транспорт (не polling):</b> <span id="vTransport">—</span></div>
+  <div class="row"><b>REST-задержка (10 запросов):</b> <span id="vRest">—</span></div>
+  <div class="row"><b>Троттлинг вкладки браузером:</b> <span id="vThrottle">—</span></div>
+  <div class="row"><b>Ровность тиков таймера (WS):</b> <span id="vTicks">—</span></div>
+</div>
+
+<h2>Live-монитор событий <select id="demSel"></select>
+  <button id="activeBtn" disabled>Тест «показать вопрос» (⚠ съест ~5с активной команды)</button></h2>
+<div id="log"></div>
+
+<script>
+'use strict';
+const NUL = String.fromCharCode(0);
+const $ = (id) => document.getElementById(id);
+let token = null, probeWs = null, lastTickAt = null;
+const tickDeltas = [];
+
+const log = (msg, cls) => {
+  const line = document.createElement('div');
+  if (cls) line.className = cls;
+  line.textContent = new Date().toISOString().slice(11, 23) + '  ' + msg;
+  $('log').appendChild(line);
+  $('log').scrollTop = $('log').scrollHeight;
+};
+const verdict = (id, text, cls) => { const el = $(id); el.textContent = text; el.className = cls; };
+
+// --- Троттлинг вкладки: setInterval(500) не должен дрейфовать ---
+(function throttleMeter() {
+  let prev = performance.now(), worst = 0;
+  setInterval(() => {
+    const now = performance.now(), drift = Math.abs(now - prev - 500);
+    prev = now;
+    if (drift > worst) {
+      worst = drift;
+      if (worst > 300) verdict('vThrottle', 'дрейф до ' + Math.round(worst) + 'мс — вкладка в фоне? Держите её активной', 'bad');
+      else verdict('vThrottle', 'ок (дрейф ' + Math.round(worst) + 'мс)', 'ok');
+    }
+  }, 500);
+  document.addEventListener('visibilitychange', () =>
+    log('вкладка ' + (document.hidden ? 'ушла в фон — браузер троттлит таймеры и звук!' : 'снова активна'), document.hidden ? 'warn' : 'ok'));
+})();
+
+async function api(path, opts = {}) {
+  opts.headers = Object.assign({ 'Content-Type': 'application/json' }, opts.headers || {},
+      token ? { Authorization: 'Bearer ' + token } : {});
+  const r = await fetch('/api/democracy' + path, opts);
+  if (!r.ok) throw new Error(path + ' → HTTP ' + r.status);
+  const text = await r.text();
+  return text ? JSON.parse(text) : null;
+}
+
+async function checkRest() {
+  const times = [];
+  for (let i = 0; i < 10; i++) {
+    const t = performance.now();
+    await api('/admin/democracies?smenaId=0');
+    times.push(performance.now() - t);
+  }
+  times.sort((a, b) => a - b);
+  const med = Math.round(times[5]), max = Math.round(times[9]);
+  verdict('vRest', 'медиана ' + med + 'мс, max ' + max + 'мс', med < 150 ? 'ok' : (med < 500 ? 'warn' : 'bad'));
+}
+
+function stompFrame(cmd, headers) {
+  return cmd + '\n' + Object.entries(headers).map(([k, v]) => k + ':' + v).join('\n') + '\n\n' + NUL;
+}
+
+function connectProbe(democracyId, teamIds) {
+  if (probeWs) { try { probeWs.close(); } catch (e) {} }
+  lastTickAt = null; tickDeltas.length = 0;
+  const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
+  const ws = new WebSocket(proto + location.host + '/api/democracy/ws/websocket');
+  probeWs = ws;
+  const t0 = performance.now();
+  ws.onopen = () => ws.send(stompFrame('CONNECT', { 'accept-version': '1.2', Authorization: 'Bearer ' + token, 'heart-beat': '0,0' }));
+  ws.onmessage = (e) => {
+    const d = String(e.data);
+    if (d.startsWith('CONNECTED')) {
+      verdict('vTransport', 'ок — WebSocket подключился за ' + Math.round(performance.now() - t0) + 'мс', 'ok');
+      const topics = ['controls', 'sound', 'pre-start'].map(t => '/topic/democracy/' + democracyId + '/' + t)
+          .concat(teamIds.map(id => '/topic/democracy/' + democracyId + '/team/' + id));
+      topics.forEach((dest, i) => ws.send(stompFrame('SUBSCRIBE', { id: 'diag-' + i, destination: dest })));
+      log('подписан на ' + topics.length + ' топиков игры ' + democracyId + ' — жмите кнопки в админке или запустите тест');
+    } else if (d.startsWith('MESSAGE')) {
+      onEvent(d);
+    } else if (d.startsWith('ERROR')) {
+      log('STOMP ERROR: ' + d.slice(0, 200), 'bad');
+    }
+  };
+  ws.onclose = (e) => { if (e.code !== 1000) verdict('vTransport', 'соединение закрыто (код ' + e.code + ') — WS не работает, SockJS уйдёт в polling!', 'bad'); };
+}
+
+function onEvent(frame) {
+  const dest = (frame.match(/destination:([^\n]+)/) || ['', '?'])[1].replace(/\/topic\/democracy\/\d+\//, '');
+  let type = '?', payload = '';
+  try {
+    const body = JSON.parse(frame.slice(frame.indexOf('\n\n') + 2).replace(NUL, ''));
+    type = body.type;
+    payload = JSON.stringify(body.payload).slice(0, 80);
+  } catch (e) {}
+  const now = performance.now();
+  let extra = '';
+  if (type === 'TIME' || type === 'PRE_START_TIME') {
+    if (lastTickAt != null) {
+      const delta = Math.round(now - lastTickAt);
+      if (delta > 300) { // свой тик раз в секунду; мелкие дельты = тики разных команд в один проход
+        tickDeltas.push(delta);
+        extra = '  Δ=' + delta + 'мс';
+        const sorted = [...tickDeltas].sort((a, b) => a - b);
+        const p95 = sorted[Math.floor(sorted.length * 0.95)];
+        verdict('vTicks', 'тиков ' + tickDeltas.length + ', p95 интервала ' + p95 + 'мс (норма ~1000)',
+            p95 < 1300 ? 'ok' : 'bad');
+      }
+    }
+    lastTickAt = now;
+  }
+  log(dest + ' ' + type + ' ' + payload + extra, type === 'SOUND' ? 'warn' : undefined);
+}
+
+$('loginBtn').onclick = async () => {
+  try {
+    $('loginState').textContent = '…';
+    const resp = await api('/public/admin/auth/login', { method: 'POST', body: JSON.stringify({ password: $('pwd').value }) });
+    token = resp.token;
+    $('loginState').textContent = 'ок';
+    await checkRest();
+    const resp2 = await api('/admin/democracies?smenaId=0');
+    const dems = (Array.isArray(resp2) ? resp2 : [resp2]).filter(Boolean); // standalone: один слот-объект
+    $('demSel').innerHTML = dems.map(d => '<option value="' + d.id + '">' + d.id + ': ' + (d.title || '') + ' [' + d.status + ']</option>').join('');
+    const active = dems.find(d => d.status === 'ACTIVE') || dems[0];
+    if (!active) { log('игр нет', 'bad'); return; }
+    $('demSel').value = active.id;
+    await attach(active.id);
+    $('demSel').onchange = () => attach(Number($('demSel').value));
+  } catch (e) {
+    $('loginState').textContent = e.message;
+    $('loginState').className = 'bad';
+  }
+};
+
+async function attach(id) {
+  let teamIds = [];
+  try {
+    const s = await api('/admin/sessions/' + id);
+    teamIds = (s.teams || []).map(t => t.teamId);
+  } catch (e) { log('сессии нет (' + e.message + ') — только controls/sound', 'warn'); }
+  connectProbe(id, teamIds);
+  $('activeBtn').disabled = false;
+}
+
+$('activeBtn').onclick = async () => {
+  const id = Number($('demSel').value);
+  $('activeBtn').disabled = true;
+  try {
+    const t0 = performance.now();
+    await api('/admin/sessions/' + id + '/controls/show-question', { method: 'POST' });
+    log('show-question: REST ' + Math.round(performance.now() - t0) + 'мс — смотрите Δ событий выше', 'ok');
+    setTimeout(async () => {
+      await api('/admin/sessions/' + id + '/controls/hide-question', { method: 'POST' }).catch(() => {});
+      log('hide-question: тест завершён', 'ok');
+      $('activeBtn').disabled = false;
+    }, 5500);
+  } catch (e) {
+    log('тест не удался: ' + e.message, 'bad');
+    $('activeBtn').disabled = false;
+  }
+};
+</script>
+</body>
+</html>
