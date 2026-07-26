@@ -33,6 +33,10 @@
   <div class="row"><b>JVM сервиса (GC / CPU / heap):</b> <span id="vJvm">—</span></div>
 </div>
 
+<div class="row" id="autoDiag" style="border: 1px solid #444; border-radius: 6px; padding: 10px; margin-top: 10px;">
+  <b>Автодиагноз:</b> <span id="vAuto">жду данных — залогиньтесь и дайте поработать минуту</span>
+</div>
+
 <h2>Live-монитор событий <select id="demSel"></select>
   <button id="activeBtn" disabled>Тест «показать вопрос» (⚠ съест ~5с активной команды)</button></h2>
 <div id="log"></div>
@@ -43,6 +47,9 @@ const NUL = String.fromCharCode(0);
 const $ = (id) => document.getElementById(id);
 let token = null, probeWs = null, lastTickAt = null, lastFrameAt = null, serverHbMs = 0;
 const tickDeltas = [], latencies = [];
+// Сводное состояние всех замеров — из него собирается автодиагноз
+const state = { transportOk: null, restMed: null, throttleWorst: 0, ticksP95: null, latP95: null,
+    gcMax: null, cpu: null, heapPct: null, pulseSilence: null };
 
 const log = (msg, cls) => {
   const line = document.createElement('div');
@@ -61,6 +68,7 @@ const verdict = (id, text, cls) => { const el = $(id); el.textContent = text; el
     prev = now;
     if (drift > worst) {
       worst = drift;
+      state.throttleWorst = worst;
       if (worst > 300) verdict('vThrottle', 'дрейф до ' + Math.round(worst) + 'мс — вкладка в фоне? Держите её активной', 'bad');
       else verdict('vThrottle', 'ок (дрейф ' + Math.round(worst) + 'мс)', 'ok');
     }
@@ -87,6 +95,7 @@ async function checkRest() {
   }
   times.sort((a, b) => a - b);
   const med = Math.round(times[5]), max = Math.round(times[9]);
+  state.restMed = med;
   verdict('vRest', 'медиана ' + med + 'мс, max ' + max + 'мс', med < 150 ? 'ok' : (med < 500 ? 'warn' : 'bad'));
 }
 
@@ -107,6 +116,7 @@ function connectProbe(democracyId, teamIds) {
     const d = String(e.data);
     if (d.startsWith('CONNECTED')) {
       verdict('vTransport', 'ок — WebSocket подключился за ' + Math.round(performance.now() - t0) + 'мс', 'ok');
+      state.transportOk = true;
       serverHbMs = parseInt((d.match(/heart-beat:(\d+),/) || [0, 0])[1], 10) || 0;
       if (!serverHbMs) verdict('vPulse', 'heartbeat отключён на сервере — пульс виден только по событиям игры', 'warn');
       const topics = ['controls', 'sound', 'pre-start'].map(t => '/topic/democracy/' + democracyId + '/' + t)
@@ -119,7 +129,7 @@ function connectProbe(democracyId, teamIds) {
       log('STOMP ERROR: ' + d.slice(0, 200), 'bad');
     }
   };
-  ws.onclose = (e) => { if (e.code !== 1000) verdict('vTransport', 'соединение закрыто (код ' + e.code + ') — WS не работает, SockJS уйдёт в polling!', 'bad'); };
+  ws.onclose = (e) => { if (e.code !== 1000) { state.transportOk = false; verdict('vTransport', 'соединение закрыто (код ' + e.code + ') — WS не работает, SockJS уйдёт в polling!', 'bad'); } };
 }
 
 function onEvent(frame) {
@@ -141,6 +151,7 @@ function onEvent(frame) {
     const corr = latencies.map(v => v - base).sort((a, b) => a - b);
     const p50 = Math.round(corr[Math.floor(corr.length / 2)]);
     const p95 = Math.round(corr[Math.floor(corr.length * 0.95)]);
+    if (corr.length >= 5) state.latP95 = p95;
     extra += '  lat=' + Math.round(Date.now() - serverTs - base) + 'мс';
     if (corr.length >= 5) {
       verdict('vLatency', 'p50 ' + p50 + 'мс, p95 ' + p95 + 'мс (' + corr.length + ' соб.)',
@@ -155,6 +166,7 @@ function onEvent(frame) {
         extra += '  Δ=' + delta + 'мс';
         const sorted = [...tickDeltas].sort((a, b) => a - b);
         const p95 = sorted[Math.floor(sorted.length * 0.95)];
+        state.ticksP95 = p95;
         verdict('vTicks', 'тиков ' + tickDeltas.length + ', p95 интервала ' + p95 + 'мс (норма ~1000)',
             p95 < 1300 ? 'ok' : 'bad');
       }
@@ -183,6 +195,7 @@ async function pollJvm() {
     const heapUsed = num(/^jvm_memory_used_bytes\{area="heap"[^}]*\} ([\d.E-]+)$/gm).reduce((a, b) => a + b, 0);
     const heapMax = num(/^jvm_memory_max_bytes\{area="heap"[^}]*\} ([\d.E-]+)$/gm).filter(v => v > 0).reduce((a, b) => a + b, 0);
     const heapPct = heapMax ? Math.round(heapUsed / heapMax * 100) : 0;
+    state.gcMax = gcMax; state.cpu = cpu; state.heapPct = heapPct;
     const cls = (gcMax > 300 || cpu > 85 || heapPct > 85) ? 'bad'
         : (gcMax > 150 || cpu > 60 || heapPct > 70) ? 'warn' : 'ok';
     verdict('vJvm', 'GC max ' + Math.round(gcMax) + 'мс, CPU ' + Math.round(cpu) + '%, heap ' + heapPct + '%', cls);
@@ -191,6 +204,45 @@ async function pollJvm() {
     verdict('vJvm', 'metrics недоступны (' + e.message + ')', 'warn');
   }
 }
+
+// --- Автодиагноз: собирает все замеры в человекочитаемый вывод ---
+setInterval(() => {
+  const s = state, findings = [];
+  if (s.transportOk === false) {
+    findings.push(['bad', 'WebSocket не работает — приложения на polling-fallback, события идут пачками. Чинить проксирование WS (Upgrade/Connection в nginx).']);
+  }
+  if (s.gcMax != null && s.gcMax > 300) {
+    findings.push(['bad', 'GC-паузы JVM до ' + Math.round(s.gcMax) + 'мс — сервису мало памяти, поднять mem_limit/heap api-контейнера. Это даёт рваные тики и запаздывающие события.']);
+  }
+  if (s.cpu != null && s.cpu > 85) {
+    findings.push(['bad', 'CPU сервиса ' + Math.round(s.cpu) + '% — железо стенда перегружено, все задержки отсюда.']);
+  }
+  if (s.heapPct != null && s.heapPct > 85) {
+    findings.push(['bad', 'Heap ' + s.heapPct + '% — JVM на грани OOM.']);
+  }
+  if (s.ticksP95 != null && s.ticksP95 > 1300 && !(s.gcMax > 300) && !(s.cpu > 85)) {
+    findings.push(['bad', 'Тики рваные (p95 ' + s.ticksP95 + 'мс) при здоровой JVM — нагрузка на хост со стороны: смотреть docker stats всех контейнеров.']);
+  }
+  if (s.latP95 != null && s.latP95 > 700 && s.ticksP95 != null && s.ticksP95 <= 1300) {
+    findings.push(['bad', 'Сервер публикует ровно, но доставка до браузера ' + s.latP95 + 'мс (p95) — сеть или прокси буферизует.']);
+  }
+  if (s.throttleWorst > 300) {
+    findings.push(['warn', 'Браузер троттлит эту вкладку (дрейф ' + Math.round(s.throttleWorst) + 'мс). Если вкладка админки тоже уходит в фон — её звук и таймер будут запаздывать так же. Держать админку активной вкладкой.']);
+  }
+  if (s.restMed != null && s.restMed > 500) {
+    findings.push(['warn', 'REST медленный (медиана ' + s.restMed + 'мс) — диск/БД стенда.']);
+  }
+  const el = $('vAuto');
+  if (findings.length) {
+    el.className = findings.some(f => f[0] === 'bad') ? 'bad' : 'warn';
+    el.textContent = findings.map(f => f[1]).join(' ');
+  } else if (s.transportOk && s.restMed != null && s.gcMax != null) {
+    el.className = 'ok';
+    el.textContent = s.ticksP95 == null
+        ? 'инфраструктура в норме; для проверки таймера запустите вопрос в админке или активный тест'
+        : 'всё в норме. Задержка 0–1с на старте таймера — штатная фаза серверного тикера (раз в секунду), не дефект.';
+  }
+}, 3000);
 
 $('loginBtn').onclick = async () => {
   try {
