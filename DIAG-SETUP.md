@@ -169,3 +169,23 @@ docker logs democracy-ui 2>&1 | grep client-log
 1. Файл с кнопки «Скачать лог» (если /diag была открыта).
 2. Вывод `docker logs democracy-ui 2>&1 | grep client-log` за период инцидента.
 3. `docker logs democracy-api --since <время>` (если по п.1–2 виновата серверная сторона).
+
+## Если вердикт «JVM сервиса» красный (GC-паузы / heap)
+
+Сначала посмотреть запас машины:
+
+```bash
+free -h && nproc && docker stats --no-stream
+```
+
+Если RAM 4 ГБ и больше — дать api запас (в своём compose, сервис api):
+
+```yaml
+    environment:
+      JAVA_OPTS: "-XX:MaxRAMPercentage=60.0 -XX:G1PeriodicGCInterval=300000"
+    mem_limit: 1536m        # при 8 ГБ+ можно 2g
+```
+
+и `docker compose up -d <имя-api-сервиса>`. Контроль — тот же вердикт JVM на
+`/diag`: heap% должен упасть, GC-паузы сократиться. На машине с 2 ГБ ничего
+не поднимать — запас уйдёт у postgres/ОС и станет хуже.
