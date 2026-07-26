@@ -9,7 +9,7 @@
 | Файл | Что это |
 |---|---|
 | `diag.html` | страница диагностики, отдаётся nginx'ом по `/diag` |
-| `democracy-service-1.0.40-amd64.tar.gz` | api: + STOMP-heartbeat каждые 4с (нужен для «пульса» соединения; всё остальное как в 1.0.39) |
+| `democracy-service-1.0.41-amd64.tar.gz` | api: + STOMP-heartbeat (для «пульса» диагностики) и фикс паса: после закрытия вопроса по порогу пасов клики командам возвращают 409, ход не крутится |
 | `democracy-admin-standalone-0.0.4-amd64.tar.gz` | админка: + телеметрия в `/client-log` и логи таймингов в консоли (функционально не менялась) |
 | `DIAG-SETUP.md` | этот файл |
 
@@ -18,7 +18,7 @@
 ### 1. Образы
 
 ```bash
-docker load < democracy-service-1.0.40-amd64.tar.gz
+docker load < democracy-service-1.0.41-amd64.tar.gz
 docker load < democracy-admin-standalone-0.0.4-amd64.tar.gz
 ```
 
@@ -26,7 +26,7 @@ docker load < democracy-admin-standalone-0.0.4-amd64.tar.gz
 
 ```yaml
   democracy-api:
-    image: 2345234523452345234534/democracy-service:1.0.40
+    image: 2345234523452345234534/democracy-service:1.0.41
     ...
 
   democracy-admin:
