@@ -10,9 +10,9 @@ cd "$(dirname "$0")"
 #   - democracy-admin-standalone — облегчённая админка Democracy (свой образ, своя версия)
 # Оператор на целевой машине: docker load < images.tar + docker compose up.
 
-VERSION="${VERSION:-1.0.39}"
+VERSION="${VERSION:-1.0.40}"
 PLAYER_VERSION="${PLAYER_VERSION:-1.0.19}"
-ADMIN_VERSION="${ADMIN_VERSION:-0.0.3}"
+ADMIN_VERSION="${ADMIN_VERSION:-0.0.4}"
 REGISTRY="2345234523452345234534"
 IMAGES=(
   "${REGISTRY}/democracy-service:${VERSION}"

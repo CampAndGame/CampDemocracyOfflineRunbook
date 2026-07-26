@@ -38,7 +38,8 @@
 </div>
 
 <h2>Live-монитор событий <select id="demSel"></select>
-  <button id="activeBtn" disabled>Тест «показать вопрос» (⚠ съест ~5с активной команды)</button></h2>
+  <button id="activeBtn" disabled>Тест «показать вопрос» (⚠ съест ~5с активной команды)</button>
+  <button id="dlBtn">Скачать лог</button></h2>
 <div id="log"></div>
 
 <script>
@@ -276,6 +277,25 @@ async function attach(id) {
   connectProbe(id, teamIds);
   $('activeBtn').disabled = false;
 }
+
+$('dlBtn').onclick = () => {
+  const head = ['Диагностика Democracy — ' + new Date().toISOString(),
+    'Транспорт: ' + $('vTransport').textContent,
+    'REST: ' + $('vRest').textContent,
+    'Троттлинг: ' + $('vThrottle').textContent,
+    'Тики: ' + $('vTicks').textContent,
+    'Доставка: ' + $('vLatency').textContent,
+    'Пульс: ' + $('vPulse').textContent,
+    'JVM: ' + $('vJvm').textContent,
+    'Автодиагноз: ' + $('vAuto').textContent, '', '--- события ---'];
+  const lines = [...document.querySelectorAll('#log div')].map(d => d.textContent);
+  const blob = new Blob([head.concat(lines).join('\n')], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'democracy-diag-' + new Date().toISOString().replace(/[:.]/g, '-') + '.txt';
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
 
 $('activeBtn').onclick = async () => {
   const id = Number($('demSel').value);
