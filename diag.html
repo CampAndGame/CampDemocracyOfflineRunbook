@@ -28,6 +28,9 @@
   <div class="row"><b>REST-задержка (10 запросов):</b> <span id="vRest">—</span></div>
   <div class="row"><b>Троттлинг вкладки браузером:</b> <span id="vThrottle">—</span></div>
   <div class="row"><b>Ровность тиков таймера (WS):</b> <span id="vTicks">—</span></div>
+  <div class="row"><b>Доставка сервер→клиент:</b> <span id="vLatency">—</span></div>
+  <div class="row"><b>Пульс WS-соединения:</b> <span id="vPulse">—</span></div>
+  <div class="row"><b>JVM сервиса (GC / CPU / heap):</b> <span id="vJvm">—</span></div>
 </div>
 
 <h2>Live-монитор событий <select id="demSel"></select>
@@ -38,8 +41,8 @@
 'use strict';
 const NUL = String.fromCharCode(0);
 const $ = (id) => document.getElementById(id);
-let token = null, probeWs = null, lastTickAt = null;
-const tickDeltas = [];
+let token = null, probeWs = null, lastTickAt = null, lastFrameAt = null, serverHbMs = 0;
+const tickDeltas = [], latencies = [];
 
 const log = (msg, cls) => {
   const line = document.createElement('div');
@@ -98,11 +101,14 @@ function connectProbe(democracyId, teamIds) {
   const ws = new WebSocket(proto + location.host + '/api/democracy/ws/websocket');
   probeWs = ws;
   const t0 = performance.now();
-  ws.onopen = () => ws.send(stompFrame('CONNECT', { 'accept-version': '1.2', Authorization: 'Bearer ' + token, 'heart-beat': '0,0' }));
+  ws.onopen = () => ws.send(stompFrame('CONNECT', { 'accept-version': '1.2', Authorization: 'Bearer ' + token, 'heart-beat': '0,4000' }));
   ws.onmessage = (e) => {
+    lastFrameAt = performance.now();
     const d = String(e.data);
     if (d.startsWith('CONNECTED')) {
       verdict('vTransport', 'ок — WebSocket подключился за ' + Math.round(performance.now() - t0) + 'мс', 'ok');
+      serverHbMs = parseInt((d.match(/heart-beat:(\d+),/) || [0, 0])[1], 10) || 0;
+      if (!serverHbMs) verdict('vPulse', 'heartbeat отключён на сервере — пульс виден только по событиям игры', 'warn');
       const topics = ['controls', 'sound', 'pre-start'].map(t => '/topic/democracy/' + democracyId + '/' + t)
           .concat(teamIds.map(id => '/topic/democracy/' + democracyId + '/team/' + id));
       topics.forEach((dest, i) => ws.send(stompFrame('SUBSCRIBE', { id: 'diag-' + i, destination: dest })));
@@ -118,20 +124,35 @@ function connectProbe(democracyId, teamIds) {
 
 function onEvent(frame) {
   const dest = (frame.match(/destination:([^\n]+)/) || ['', '?'])[1].replace(/\/topic\/democracy\/\d+\//, '');
-  let type = '?', payload = '';
+  let type = '?', payload = '', serverTs = null;
   try {
     const body = JSON.parse(frame.slice(frame.indexOf('\n\n') + 2).replace(NUL, ''));
     type = body.type;
+    serverTs = body.timestamp ? Date.parse(body.timestamp) : null;
     payload = JSON.stringify(body.payload).slice(0, 80);
   } catch (e) {}
   const now = performance.now();
   let extra = '';
+  if (serverTs) {
+    // сырая задержка включает рассинхрон часов; вычитаем минимум как базу
+    latencies.push(Date.now() - serverTs);
+    if (latencies.length > 200) latencies.shift();
+    const base = Math.min(...latencies);
+    const corr = latencies.map(v => v - base).sort((a, b) => a - b);
+    const p50 = Math.round(corr[Math.floor(corr.length / 2)]);
+    const p95 = Math.round(corr[Math.floor(corr.length * 0.95)]);
+    extra += '  lat=' + Math.round(Date.now() - serverTs - base) + 'мс';
+    if (corr.length >= 5) {
+      verdict('vLatency', 'p50 ' + p50 + 'мс, p95 ' + p95 + 'мс (' + corr.length + ' соб.)',
+          p95 < 200 ? 'ok' : (p95 < 700 ? 'warn' : 'bad'));
+    }
+  }
   if (type === 'TIME' || type === 'PRE_START_TIME') {
     if (lastTickAt != null) {
       const delta = Math.round(now - lastTickAt);
       if (delta > 300) { // свой тик раз в секунду; мелкие дельты = тики разных команд в один проход
         tickDeltas.push(delta);
-        extra = '  Δ=' + delta + 'мс';
+        extra += '  Δ=' + delta + 'мс';
         const sorted = [...tickDeltas].sort((a, b) => a - b);
         const p95 = sorted[Math.floor(sorted.length * 0.95)];
         verdict('vTicks', 'тиков ' + tickDeltas.length + ', p95 интервала ' + p95 + 'мс (норма ~1000)',
@@ -143,12 +164,42 @@ function onEvent(frame) {
   log(dest + ' ' + type + ' ' + payload + extra, type === 'SOUND' ? 'warn' : undefined);
 }
 
+// --- Пульс: сервер шлёт heartbeat каждые 4с; тишина >10с = связь/сервер встали ---
+setInterval(() => {
+  if (!serverHbMs || !probeWs || probeWs.readyState !== 1 || lastFrameAt == null) return;
+  const silence = Math.round((performance.now() - lastFrameAt) / 1000);
+  const limit = Math.max(10, serverHbMs / 1000 * 2.5);
+  if (silence > limit) verdict('vPulse', 'тишина ' + silence + 'с — соединение или сервер зависли!', 'bad');
+  else verdict('vPulse', 'ок (фрейм ' + silence + 'с назад)', 'ok');
+}, 2000);
+
+// --- JVM сервиса через /actuator/prometheus (открыт без auth) ---
+async function pollJvm() {
+  try {
+    const text = await fetch('/api/democracy/actuator/prometheus').then(r => r.text());
+    const num = (re) => [...text.matchAll(re)].map(m => parseFloat(m[1]));
+    const gcMax = Math.max(0, ...num(/^jvm_gc_pause_seconds_max\{[^}]*\} ([\d.E-]+)$/gm)) * 1000;
+    const cpu = Math.max(0, ...num(/^process_cpu_usage ([\d.E-]+)$/gm)) * 100;
+    const heapUsed = num(/^jvm_memory_used_bytes\{area="heap"[^}]*\} ([\d.E-]+)$/gm).reduce((a, b) => a + b, 0);
+    const heapMax = num(/^jvm_memory_max_bytes\{area="heap"[^}]*\} ([\d.E-]+)$/gm).filter(v => v > 0).reduce((a, b) => a + b, 0);
+    const heapPct = heapMax ? Math.round(heapUsed / heapMax * 100) : 0;
+    const cls = (gcMax > 300 || cpu > 85 || heapPct > 85) ? 'bad'
+        : (gcMax > 150 || cpu > 60 || heapPct > 70) ? 'warn' : 'ok';
+    verdict('vJvm', 'GC max ' + Math.round(gcMax) + 'мс, CPU ' + Math.round(cpu) + '%, heap ' + heapPct + '%', cls);
+    if (gcMax > 300) log('JVM: GC-пауза ' + Math.round(gcMax) + 'мс — вот причина рваных тиков', 'bad');
+  } catch (e) {
+    verdict('vJvm', 'metrics недоступны (' + e.message + ')', 'warn');
+  }
+}
+
 $('loginBtn').onclick = async () => {
   try {
     $('loginState').textContent = '…';
     const resp = await api('/public/admin/auth/login', { method: 'POST', body: JSON.stringify({ password: $('pwd').value }) });
     token = resp.token;
     $('loginState').textContent = 'ок';
+    pollJvm();
+    setInterval(pollJvm, 5000);
     await checkRest();
     const resp2 = await api('/admin/democracies?smenaId=0');
     const dems = (Array.isArray(resp2) ? resp2 : [resp2]).filter(Boolean); // standalone: один слот-объект
