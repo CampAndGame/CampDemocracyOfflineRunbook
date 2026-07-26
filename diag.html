@@ -140,7 +140,8 @@ function onEvent(frame) {
     const body = JSON.parse(frame.slice(frame.indexOf('\n\n') + 2).replace(NUL, ''));
     type = body.type;
     serverTs = body.timestamp ? Date.parse(body.timestamp) : null;
-    payload = JSON.stringify(body.payload).slice(0, 80);
+    const full = JSON.stringify(body.payload) || '';
+    payload = full.length > 80 ? full.slice(0, 80) + '… (' + full.length + ' зн.)' : full;
   } catch (e) {}
   const now = performance.now();
   let extra = '';
