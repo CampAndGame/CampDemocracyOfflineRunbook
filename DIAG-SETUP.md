@@ -11,7 +11,7 @@
 | `diag.html` | страница диагностики, отдаётся nginx'ом по `/diag` |
 | `democracy-service-1.0.41-amd64.tar.gz` | api: + STOMP-heartbeat (для «пульса» диагностики) и фикс паса: после закрытия вопроса по порогу пасов клики командам возвращают 409, ход не крутится |
 | `democracy-admin-standalone-0.0.4-amd64.tar.gz` | админка: + телеметрия в `/client-log` и логи таймингов в консоли (функционально не менялась) |
-| `democracy-player-1.0.20-amd64.tar.gz` | плеер: пас вне розыгрыша вопроса молча игнорируется (без всплывающих ошибок у команд) |
+| `democracy-player-1.0.21-amd64.tar.gz` | плеер: пас вне розыгрыша молча игнорируется (без ошибок у команд), переносы строк в тексте вопроса/ответа, аудио-вопрос без битой картинки на показе ответа |
 | `DIAG-SETUP.md` | этот файл |
 
 ## Установка
@@ -21,7 +21,7 @@
 ```bash
 docker load < democracy-service-1.0.41-amd64.tar.gz
 docker load < democracy-admin-standalone-0.0.4-amd64.tar.gz
-docker load < democracy-player-1.0.20-amd64.tar.gz
+docker load < democracy-player-1.0.21-amd64.tar.gz
 ```
 
 В своём `docker-compose.yml` поменять теги — должно получиться так:
@@ -36,7 +36,7 @@ docker load < democracy-player-1.0.20-amd64.tar.gz
     ...
 
   democracy-player:
-    image: 2345234523452345234534/democracy-player:1.0.20
+    image: 2345234523452345234534/democracy-player:1.0.21
     ...
 ```
 

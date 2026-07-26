@@ -13,3 +13,10 @@ images.tar
 
 # IDE
 .idea/
+
+# amd64-архивы образов для передачи на стенд — не в git
+*.tar.gz
+
+.DS_Store
+democracy-standalone-v*/
+ui-build/
