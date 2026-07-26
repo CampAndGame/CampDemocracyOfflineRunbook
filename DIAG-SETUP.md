@@ -22,12 +22,21 @@ docker load < democracy-service-1.0.40-amd64.tar.gz
 docker load < democracy-admin-standalone-0.0.4-amd64.tar.gz
 ```
 
-В своём `docker-compose.yml` поменять теги:
-- сервис с образом `.../democracy-service:` → тег `1.0.40`
-- сервис с образом `.../democracy-admin-standalone:` → тег `0.0.4`
+В своём `docker-compose.yml` поменять теги — должно получиться так:
 
-(если теги заданы переменными `${VERSION:-...}` / `${ADMIN_VERSION:-...}` —
-поменять дефолты или экспортировать переменные).
+```yaml
+  democracy-api:
+    image: 2345234523452345234534/democracy-service:1.0.40
+    ...
+
+  democracy-admin:
+    image: 2345234523452345234534/democracy-admin-standalone:0.0.4
+    ...
+```
+
+(имена сервисов могут отличаться — ориентируйтесь на имя образа; если теги
+заданы переменными `${VERSION:-...}` / `${ADMIN_VERSION:-...}` — поменять
+дефолты или экспортировать переменные).
 
 ### 2. Nginx: страница /diag и приёмник телеметрии /client-log
 
@@ -112,6 +121,16 @@ nginx-контейнера. Посмотреть после инцидента:
 ```bash
 docker logs democracy-ui 2>&1 | grep client-log
 ```
+
+Пример строк (обычный access-log nginx, вся суть — в query-параметрах):
+
+```
+[26/Jul/2026:08:54:11 +0000] "POST /client-log?src=admin-ws&ev=SOUND&lat=0"
+[26/Jul/2026:08:54:11 +0000] "POST /client-log?src=admin-sound&ev=PRE_START_TIMER&note=blocked&err=NotAllowedError"
+```
+
+(первая: событие SOUND дошло до вкладки админки с задержкой 0мс; вторая:
+браузер не дал проиграть звук — не было клика по странице).
 
 Что там:
 - `src=admin-ws&ev=<тип>&lat=<мс>` — задержка приёма события вкладкой админки.
